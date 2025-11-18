@@ -35,7 +35,7 @@ def handle_message(message):
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # ←←← РАБОЧАЯ модель 2025 года
+          model="llama-3.1-70b-versatile"  ,   # ←←← РАБОЧАЯ модель 2025 года
             messages=user_histories[user_id],
             temperature=0.8,
             max_tokens=1500
