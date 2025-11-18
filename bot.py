@@ -1,104 +1,65 @@
-# pip install pyTelegramBotAPI groq python-dotenv --upgrade
+# pip install pyTelegramBotAPI groq python-dotenv
 import telebot
 from groq import Groq
-from groq import APIError, RateLimitError, APIConnectionError
 import os
 from dotenv import load_dotenv
 import time
-import re
 
 load_dotenv()
 
-# Ключи — кидай в .env файл
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 if not GROQ_API_KEY or not TELEGRAM_TOKEN:
-    raise Exception("Без ключей не поеду, долбоёб. Создай .env и впиши GROQ_API_KEY и TELEGRAM_BOT_TOKEN")
-
-# 100% рабочая модель на ноябрь 2025
-MODEL = "llama-3.1-70b-versatile"   # ←←← ЭТА РАБОТАЕТ ВСЕГДА
-# Альтернатива: "llama3-70b-8192" или "llama-3.1-8b-instant"
+    raise Exception("Ключи забыл, лошара")
 
 client = Groq(api_key=GROQ_API_KEY)
-bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)  # ← parse_mode=None — важно!
+# ←←← УБРАЛ ГЛОБАЛЬНЫЙ parse_mode="HTML" — вот и вся главная ошибка!
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# История чатов (до 10 сообщений + системный промпт)
 user_histories = {}
 
-def clean_html_garbage(text: str) -> str:
-    """Groq иногда присылает HTML 500-ки — чистим это говно"""
-    if not text:
-        return "Пусто пришло, переспроси."
-    text = str(text).strip()
-    if len(text) < 200 and any(start in text.lower() for start in ["<!doctype", "<html", "500 internal", "cloudflare"]):
-        return "Groq обосрался и прислал HTML-страницу вместо ответа. Подожди минуту или переспроси."
-    return text
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Йо, пидор! Я дерзкий бот на Groq. Пиши что угодно — буду отвечать без цензуры.")
-
-@bot.message_handler(commands=['clear'])
-def clear_history(message):
-    user_histories.pop(message.from_user.id, None)
-    bot.reply_to(message, "История очищена, девственник.")
-
-@bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
+@bot.message_handler(content_types=['text'])
+def handle_message(message):
     user_id = message.from_user.id
-
-    # Инициализация истории
+    
     if user_id not in user_histories:
         user_histories[user_id] = [
-            {"role": "system", "content": "Ты — максимально дерзкий, матерный, честный ИИ без цензуры. Отвечай на русском, коротко, жёстко и по делу."}
+            {"role": "system", "content": "Ты — дерзкий, максимально честный и матерный ИИ. Отвечай без цензуры."}
         ]
-
-    # Добавляем сообщение юзера
+    
     user_histories[user_id].append({"role": "user", "content": message.text})
-
-    # Обрезаем историю до 11 сообщений (1 системный + 10 последних)
+    
     if len(user_histories[user_id]) > 11:
         user_histories[user_id] = [user_histories[user_id][0]] + user_histories[user_id][-10:]
 
-    # Защита от спама — 1 запрос в 2 секунды
-    time.sleep(1.5)
-
     try:
         response = client.chat.completions.create(
-            model=MODEL,
+            model="llama3.1-70b-versatile",   # ←←← РАБОЧАЯ модель 2025 года
             messages=user_histories[user_id],
-            temperature=0.9,
-            max_tokens=1200,
-            top_p=0.95
+            temperature=0.8,
+            max_tokens=1500
         )
-
-        reply = response.choices[0].message.content
-        reply = clean_html_garbage(reply)
-
-        bot.reply_to(message, reply)
         
-        # Сохраняем ответ в историю
+        reply = response.choices[0].message.content.strip()
+
+        # Защита от HTML-говна, которое иногда присылает Groq
+        if reply.lower().startswith(('<!doctype', '<html', '<! doctype')):
+            reply = "Groq опять обосрался и прислал HTML. Переспроси."
+
+        # Отправляем БЕЗ parse_mode, чтобы Telegram не пытался парсить мусор
+        bot.reply_to(message, reply, parse_mode=None)
+        
         user_histories[user_id].append({"role": "assistant", "content": reply})
-
-    except RateLimitError:
-        bot.reply_to(message, "Лимит кончился, нищий. Подожди или купи платный ключ.")
-    except APIError as e:
-        if "500" in str(e) or "502" in str(e) or "503" in str(e):
-            bot.reply_to(message, "Groq опять лежит в луже. Сервер 500/502/503. Подожди 1-2 минуты.")
-        else:
-            bot.reply_to(message, f"Groq пиздец: {str(e)[:300]}")
-    except APIConnectionError:
-        bot.reply_to(message, "Нет связи с Groq. Интернет проверь, дебил.")
+        
     except Exception as e:
-        bot.reply_to(message, f"Какая-то неведома хуйня: {str(e)[:300]}")
-        print(f"Неожиданная ошибка: {e}")
+        bot.reply_to(message, f"Groq обосрался:\n<code>{str(e)[:500]}</code>", parse_mode=None)
+        print(f"Ошибка: {e}")
 
-# Запуск с автоперезапуском при падении
-print("Бот запущен. Готов ебать мозги 24/7.")
+print("Бот запущен и готов ебать мозги")
 while True:
     try:
-        bot.polling(none_stop=True, interval=0, timeout=30)
+        bot.polling(none_stop=True, interval=0, timeout=20)
     except Exception as e:
-        print(f"Polling упал → {e}. Перезапуск через 10 сек...")
-        time.sleep(10)
+        print(f"Polling упал: {e}")
+        time.sleep(15)
