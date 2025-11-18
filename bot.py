@@ -39,7 +39,7 @@ def handle_message(message):
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-70b-versatile",  # или какой там у тебя сейчас актуальный
+           model='llama-3.3-70b-versatile' ",  # или какой там у тебя сейчас актуальный
             messages=user_histories[user_id],
             temperature=0.7,   # 0 — это скучно, поставь хотя бы 0.7–0.9
             max_tokens=1000
