@@ -1,3 +1,7 @@
 {
-  "start": "python bot.py"
+  "$schema": "https://railway.app/railway.schema.json",
+  "start": "python bot.py",
+  "build": {
+    "builder": "nixpacks"
+  }
 }
